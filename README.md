@@ -4,7 +4,7 @@
 Source code to reproduce results in the paper "RNAdegformer: Accurate Prediction of mRNA Degradation at Nucleotide Resolution with Deep Learning".
 
 <p align="center">
-  <img src="https://github.com/Shujun-He/Nucleic-Transformer/blob/master/graphics/overview.PNG"/>
+  <img src="https://raw.githubusercontent.com/Shujun-He/RNAdegformer/main/graphics/RNAdegformer.png?token=GHSAT0AAAAAABRGHIRJEZ6B5EDBACIOX5FYYXXGAYQ"/>
 </p>
 
 
