@@ -10,7 +10,7 @@ Source code to reproduce results in the paper "RNAdegformer: Accurate Prediction
 
 ## How to use the models
 
-I also made a web app to use the models. Check it out at https://github.com/Shujun-He/Nucleic-Transformer-WebApp
+I also made a web app to use the models. Check it out at [https://github.com/Shujun-He/Nucleic-Transformer-WebApp](https://github.com/Shujun-He/RNAdegformer-Webapp)
 
 
 ## Requirements
