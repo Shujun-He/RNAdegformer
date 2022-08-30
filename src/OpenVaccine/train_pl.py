@@ -18,7 +18,6 @@ try:
 except ImportError:
     raise ImportError("Please install apex from https://www.github.com/nvidia/apex to run this example.")
 from torchvision import transforms, utils
-#from Mutation import *
 from sklearn.model_selection import train_test_split, KFold
 
 def get_args():
@@ -53,6 +52,7 @@ def get_args():
     parser.add_argument('--error_beta', type=float, default=5, help='number of workers for dataloader')
     parser.add_argument('--error_alpha', type=float, default=0, help='number of workers for dataloader')
     parser.add_argument('--noise_filter', type=float, default=0.25, help='number of workers for dataloader')
+    parser.add_argument('--weight_path', type=str, default='.', help='weight path')
     opts = parser.parse_args()
     return opts
 
@@ -78,7 +78,7 @@ def train_fold():
 
     _,labels=get_data(json)
     sequences=np.asarray(json.sequence)
-    train_seqs=sequences[train_indices]
+    train_seqs=list(sequences[train_indices])
     val_seqs=sequences[val_indices]
     train_labels=labels[train_indices]
     val_labels=labels[val_indices]
@@ -87,21 +87,81 @@ def train_fold():
     train_ew=error_weights[train_indices]
     val_ew=error_weights[val_indices]
 
+
+    train_labels=np.pad(train_labels,((0,0),(0,23),(0,0)),constant_values=0)
+    train_ew=np.pad(train_ew,((0,0),(0,23),(0,0)),constant_values=0)
+
+    n_train=len(train_labels)
+
+    #train_ids=train_ids+long_df.id.to_list()
+
+    test_json_path=os.path.join(opts.path,'test.json')
+    test = pd.read_json(test_json_path, lines=True)
+
+    #aug_test=test
+    #dataloader
+    with open(f'../pseudo_labels/pseudo_labels_fold{opts.fold}.p','rb') as f:
+        long_preds,long_stds,short_preds,short_stds=pickle.load(f)
+
+    short_preds=short_preds[:,:91]
+    short_stds=short_stds[:,:91]
+    long_preds=long_preds[:,:91]
+    long_stds=long_stds[:,:91]
+    short_stds[:,68:]=0
+
+
+    ls_indices=test.seq_length==130
+    long_data=test[ls_indices]
+    long_ids=np.asarray(long_data.id.to_list())
+    long_sequences=np.asarray(long_data.sequence.to_list())
+    # long_indices,_=get_train_val_indices_PL(long_sequences,opts.fold,SEED=2020,nfolds=opts.nfolds)
+    # long_sequences=long_sequences[long_indices]
+    # long_preds=long_preds[long_indices]
+    # long_stds=long_stds[long_indices]
+    # long_ids=long_ids[long_indices]
+    long_stds=opts.error_alpha+np.exp(-5*opts.error_beta*long_stds)
+
+    ss_indices=test.seq_length==107
+    short_data=test[ss_indices]
+    short_ids=np.asarray(short_data.id)
+    short_sequences=np.asarray(short_data.sequence)
+    # short_indices,_=get_train_val_indices_PL(short_sequences,opts.fold,SEED=2020,nfolds=opts.nfolds)
+    # short_sequences=short_sequences[short_indices]
+    # short_preds=short_preds[short_indices]
+    # short_stds=short_stds[short_indices]
+    # short_ids=short_ids[short_indices]
+    short_stds=opts.error_alpha+np.exp(-5*opts.error_beta*short_stds)
+
+    train_seqs=np.concatenate([train_seqs,short_sequences,long_sequences])
+    train_labels=np.concatenate([train_labels,short_preds,long_preds],0)
+    train_ids=np.concatenate([train_ids,short_ids,long_ids])
+    train_ew=np.concatenate([train_ew,short_stds,long_stds])
+    print(train_labels.shape)
+    print(train_ids.shape)
+    print(train_ew.shape)
+    #exit()
+
+
     #train_inputs=np.stack([train_inputs],0)
     #val_inputs=np.stack([val_inputs,val_inputs2],0)
-    dataset=RNADataset(train_seqs,train_labels,train_ids, train_ew, opts.path)
-    val_dataset=RNADataset(val_seqs,val_labels, val_ids, val_ew, opts.path, training=False)
-    dataloader = DataLoader(dataset, batch_size=opts.batch_size,
+    pl_dataset=RNADataset(train_seqs[n_train:],train_labels[n_train:],train_ids[n_train:], train_ew[n_train:], opts.path,pad=True,k=opts.kmers[0])
+    val_dataset=RNADataset(val_seqs,val_labels, val_ids, val_ew, opts.path, training=False, k=opts.kmers[0])
+    pl_dataloader = DataLoader(pl_dataset, batch_size=opts.batch_size,
                             shuffle=True, num_workers=opts.workers)
     val_dataloader = DataLoader(val_dataset, batch_size=opts.batch_size*2,
                             shuffle=False, num_workers=opts.workers)
 
+    finetune_dataset=RNADataset(train_seqs[:n_train],train_labels[:n_train,:68],train_ids[:n_train], train_ew[:n_train,:68], opts.path,k=opts.kmers[0])
+    finetune_dataloader = DataLoader(finetune_dataset, batch_size=opts.batch_size//2,
+                            shuffle=True, num_workers=opts.workers)
     # print(dataset.data.shape)
     # print(dataset.bpps[0].shape)
     # exit()
     #checkpointing
-    checkpoints_folder='checkpoints_fold{}'.format((opts.fold))
-    csv_file='log_fold{}.csv'.format((opts.fold))
+    os.system('mkdir weights')
+    checkpoints_folder='weights/checkpoints_fold{}_pl'.format((opts.fold))
+    os.system('mkdir logs')
+    csv_file='logs/log_pl_fold{}.csv'.format((opts.fold))
     columns=['epoch','train_loss',
              'val_loss']
     logger=CSVLogger(columns,csv_file)
@@ -118,9 +178,9 @@ def train_fold():
     opt_level = 'O1'
     #model, optimizer = amp.initialize(model, optimizer, opt_level=opt_level)
     model = nn.DataParallel(model)
-    pretrained_df=pd.read_csv('pretrain.csv')
-    #print(pretrained_df.epoch[-1])
-    model.load_state_dict(torch.load('pretrain_weights/epoch{}.ckpt'.format(int(pretrained_df.iloc[-1].epoch))))
+    #model.load_state_dict(torch.load(f'{opts.weight_path}/best_weights/fold{opts.fold}top1.ckpt'))
+    model.load_state_dict(torch.load(f'{opts.weight_path}/pretrain_weights/epoch200.ckpt'))
+
 
     pytorch_total_params = sum(p.numel() for p in model.parameters())
     print('Total number of paramters: {}'.format(pytorch_total_params))
@@ -131,7 +191,9 @@ def train_fold():
     #print("Starting training for fold {}/{}".format(opts.fold,opts.nfolds))
     #training loop
     cos_epoch=int(opts.epochs*0.75)-1
-    lr_schedule=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,(opts.epochs-cos_epoch)*len(dataloader))
+    #cos_epoch=0
+    #cos_epoch=-1
+    lr_schedule=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,(opts.epochs-cos_epoch)*len(finetune_dataloader))
     for epoch in range(opts.epochs):
         model.train(True)
         t=time.time()
@@ -140,6 +202,11 @@ def train_fold():
         train_preds=[]
         ground_truths=[]
         step=0
+        if epoch > cos_epoch:
+            dataloader=finetune_dataloader
+        else:
+            dataloader=pl_dataloader
+
         for data in dataloader:
         #for step in range(1):
             step+=1
@@ -149,7 +216,9 @@ def train_fold():
             src=data['data'].to(device)
             labels=data['labels']
             bpps=data['bpp'].to(device)
-            #print(bpps.shape[1])
+
+            #print(bpps.shape)
+            #exit()
             # bpp_selection=np.random.randint(bpps.shape[1])
             # bpps=bpps[:,bpp_selection]
             # src=src[:,bpp_selection]
@@ -163,11 +232,14 @@ def train_fold():
             #src=mutate_rna_input(src,opts.nmute)
             #src=src.long()[:,np.random.randint(2)]
             labels=labels.to(device)#.float()
-            output=model(src,bpps)
+            src_mask=data['src_mask'].to(device)
+            #exit()
+            output=model(src,bpps,src_mask)
             ew=data['ew'].to(device)
+
             #print(output.shape)
             #print(labels.shape)
-            loss=criterion(output[:,:68],labels,ew).mean()
+            loss=criterion(output[:,:labels.shape[1]],labels,ew).mean()
 
             # with amp.scale_loss(loss, optimizer) as scaled_loss:
             #    scaled_loss.backward()
@@ -199,7 +271,7 @@ def train_fold():
         #     print('yes')
 
 
-    get_best_weights_from_fold(opts.fold)
+    #get_best_weights_from_fold(opts.fold)
 
 if __name__ == '__main__':
     train_fold()

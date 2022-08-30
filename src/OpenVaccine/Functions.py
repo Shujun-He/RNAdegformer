@@ -193,6 +193,13 @@ def get_train_val_indices(df,fold,SEED=2020,nfolds=5):
     val_indices=val_indices[np.asarray(df.signal_to_noise)[val_indices]>1]
     return train_indices,val_indices
 
+def get_train_val_indices_PL(data, fold, SEED=2020,nfolds=5):
+    splits = KFold(n_splits=nfolds, random_state=SEED, shuffle=True)
+    splits = list(splits.split(data))
+    train_indices=splits[fold][0]
+    val_indices=splits[fold][1]
+    #val_indices=val_indices[np.asarray(df.signal_to_noise)[val_indices]>1]
+    return train_indices,val_indices
 
 def get_best_weights_from_fold(fold,top=5):
     csv_file='log_fold{}.csv'.format(fold)
@@ -209,14 +216,6 @@ def get_best_weights_from_fold(fold,top=5):
         os.system('cp {} best_weights/fold{}top{}.ckpt'.format(weights_path,fold,i+1))
     os.system('rm -r checkpoints_fold{}'.format(fold))
 
-def smoothcrossentropyloss(pred,gold,n_class=2,smoothing=0.05):
-    gold = gold.contiguous().view(-1)
-    one_hot = torch.zeros_like(pred).scatter(1, gold.view(-1, 1), 1)
-    one_hot = one_hot * (1 - smoothing) + (1 - one_hot) * smoothing / (n_class - 1)
-    log_prb = F.log_softmax(pred, dim=1)
-    loss = -(one_hot * log_prb)
-    #loss=loss.sum(1).mean()
-    return loss
 
 def mutate_dna_sequence(sequence,nmute=15):
     perm = torch.randperm(sequence.size(1))

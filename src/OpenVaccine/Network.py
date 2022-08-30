@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import matplotlib.pyplot as plt
 
 #mish activation
 class Mish(nn.Module):
@@ -37,16 +37,37 @@ class ScaledDotProductAttention(nn.Module):
         self.dropout = nn.Dropout(attn_dropout)
         self.gamma=nn.Parameter(torch.tensor(100.0))
 
-    def forward(self, q, k, v, mask=None):
+    def forward(self, q, k, v, mask=None, attn_mask=None):
 
-        attn = torch.matmul(q / self.temperature, k.transpose(2, 3))
+        attn = torch.matmul(q, k.transpose(2, 3))/ self.temperature
+        to_plot=attn[0,0].detach().cpu().numpy()
+        # plt.imshow(to_plot)
+        # plt.show()
+        # exit()
 
+        #exit()
         if mask is not None:
             #attn = attn.masked_fill(mask == 0, -1e9)
             #attn = attn#*self.gamma
             attn = attn+mask*self.gamma
-        attn = self.dropout(F.softmax(attn, dim=-1))
+        if attn_mask is not None:
+            # print(attn.shape)
+            # print(attn_mask.shape)
+            # attn = attn+attn_mask
+            #attn=attn.float().masked_fill(attn_mask == 0, float('-inf'))
+            attn=attn.float().masked_fill(attn_mask == 0, float('-1e-9'))
 
+        attn = self.dropout(F.softmax(attn, dim=-1))
+        # print(attn[0,0])
+        # to_plot=attn[0,0].detach().cpu().numpy()
+        # with open('mat.txt','w+') as f:
+        #     for vector in to_plot:
+        #         for num in vector:
+        #             f.write('{:04.3f} '.format(num))
+        #         f.write('\n')
+        # plt.imshow(to_plot)
+        # plt.show()
+        # exit()
         output = torch.matmul(attn, v)
 
         return output, attn
@@ -72,7 +93,7 @@ class MultiHeadAttention(nn.Module):
         #self.layer_norm = nn.LayerNorm(d_model, eps=1e-6)
 
 
-    def forward(self, q, k, v, mask=None):
+    def forward(self, q, k, v, mask=None,src_mask=None):
 
         d_k, d_v, n_head = self.d_k, self.d_v, self.n_head
         sz_b, len_q, len_k, len_v = q.size(0), q.size(1), k.size(1), v.size(1)
@@ -91,7 +112,33 @@ class MultiHeadAttention(nn.Module):
         if mask is not None:
             mask = mask  # For head axis broadcasting
 
-        q, attn = self.attention(q, k, v, mask=mask)
+        # print(q.shape)
+        # print(k.shape)
+        # print(v.shape)
+        if src_mask is not None:
+            src_mask=src_mask[:,:q.shape[2]].unsqueeze(-1).float()
+            # q=q+src_mask
+            # k=k+src_mask
+            # print(src_mask.shape)
+            # print(src_mask[0])
+            attn_mask=torch.matmul(src_mask,src_mask.permute(0,2,1))#.long()
+            #attn_mask=attn_mask.float().masked_fill(attn_mask == 0, float('-inf')).masked_fill(attn_mask == 1, float(0.0))
+            attn_mask=attn_mask.unsqueeze(1)
+            # print(attn_mask.shape)
+            # exit()
+            # print(src_mask.shape)
+            #to_plot=attn_mask[1].squeeze().detach().cpu().numpy()
+            #plt.imshow(to_plot)
+            #plt.show()
+            # exit()
+            # exit()
+            # src_mask
+            # src_mask
+            #print(q[0,0,:,0])
+        #exit()
+            q, attn = self.attention(q, k, v, mask=mask,attn_mask=attn_mask)
+        else:
+            q, attn = self.attention(q, k, v, mask=mask)
         #print(attn.shape)
         # Transpose to move the head dimension back: b x lq x n x dv
         # Combine the last two dimensions to concatenate all the heads together: b x lq x (n*dv)
@@ -169,7 +216,7 @@ class ConvTransformerEncoderLayer(nn.Module):
         self.conv=nn.Conv1d(d_model,d_model,k,padding=0)
         self.deconv=nn.ConvTranspose1d(d_model,d_model,k)
 
-    def forward(self, src , mask):
+    def forward(self, src , mask, src_mask=None):
         res = src
         src = self.norm3(self.conv(src.permute(0,2,1)).permute(0,2,1))
         mask_res=mask
@@ -178,7 +225,7 @@ class ConvTransformerEncoderLayer(nn.Module):
         #mask = self.mask_conv2(mask)
         # mask = self.mask_activation2(mask)
         # mask = self.mask_conv3(mask)
-        src2,attention_weights = self.self_attn(src, src, src, mask=mask)
+        src2,attention_weights = self.self_attn(src, src, src, mask=mask, src_mask=src_mask)
         #src3,_ = self.self_attn(src, src, src, mask=None)
         #src2=src2+src3
         src = src + self.dropout1(src2)
@@ -249,7 +296,7 @@ class NucleicTransformer(nn.Module):
         mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
         return mask
 
-    def forward(self, src, mask=None):
+    def forward(self, src, mask=None,src_mask=None):
         B,L,_=src.shape
         src = src
         src = self.encoder(src).reshape(B,L,-1)
@@ -258,8 +305,11 @@ class NucleicTransformer(nn.Module):
 
         #mask=mask.unsqueeze(1)
         mask=self.mask_dense(mask)
-        for layer in self.transformer_encoder:
-            src,attention_weights_layer,mask=layer(src, mask)
+        for i,layer in enumerate(self.transformer_encoder):
+            if src_mask is not None:
+                src,attention_weights_layer,mask=layer(src, mask, src_mask[:,i])
+            else:
+                src,attention_weights_layer,mask=layer(src, mask)
             #attention_weights.append(attention_weights_layer)
         #attention_weights=torch.stack(attention_weights).permute(1,0,2,3)
         encoder_output = src

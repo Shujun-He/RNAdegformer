@@ -22,6 +22,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu_id', type=str, default='0,1',  help='which gpu to use')
     parser.add_argument('--path', type=str, default='../', help='path of csv file with DNA sequences and labels')
+    parser.add_argument('--weights_path', type=str, default='../', help='path of csv file with DNA sequences and labels')
     parser.add_argument('--epochs', type=int, default=150, help='number of epochs to train')
     parser.add_argument('--batch_size', type=int, default=24, help='size of each batch during training')
     parser.add_argument('--weight_decay', type=float, default=0, help='weight dacay used in optimizer')
@@ -54,6 +55,9 @@ os.environ["CUDA_VISIBLE_DEVICES"] = opts.gpu_id
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #lr=0
 
+sub_folder=f"{opts.weights_path}_subs"
+os.system(f'mkdir {sub_folder}')
+
 # json_path=os.path.join(opts.path,'train.json')
 # data,labels=get_data(json_path)
 # exit()
@@ -71,7 +75,7 @@ fold_models=[]
 folds=np.arange(opts.nfolds)
 for fold in folds:
     MODELS=[]
-    for i in range(5):
+    for i in range(1):
 
         model=NucleicTransformer(opts.ntoken, opts.nclass, opts.ninp, opts.nhead, opts.nhid,
                                opts.nlayers, opts.kmer_aggregation, kmers=opts.kmers,
@@ -88,7 +92,7 @@ for fold in folds:
         pytorch_total_params = sum(p.numel() for p in model.parameters())
         print('Total number of paramters: {}'.format(pytorch_total_params))
 
-        model.load_state_dict(torch.load("best_weights/fold{}top{}.ckpt".format(fold,i+1)))
+        model.load_state_dict(torch.load(f"{opts.weights_path}/fold{fold}top{i+1}.ckpt"))
         #model.load_state_dict(torch.load("checkpoints_fold0/epoch{}.ckpt".format(i)))
         model.eval()
         MODELS.append(model)
@@ -118,50 +122,50 @@ def preprocess_inputs(df, cols=['sequence', 'structure', 'predicted_loop_type'])
         (0, 2, 1)
     )
 
-alt_structure_df=pd.read_csv(os.path.join(opts.path,'test_alternative_structure_loops.csv'))
-alt_structure_df_50C=pd.read_csv(os.path.join(opts.path,'test_alternative_structure_loops_50C.csv'))
+# alt_structure_df=pd.read_csv(os.path.join(opts.path,'test_alternative_structure_loops.csv'))
+# alt_structure_df_50C=pd.read_csv(os.path.join(opts.path,'test_alternative_structure_loops_50C.csv'))
 
 #alt_input=
 
 json_path=os.path.join(opts.path,'test.json')
 test = pd.read_json(json_path, lines=True)
-aug_df_path=os.path.join(opts.path,'aug_data1.csv')
-aug_df=pd.read_csv(aug_df_path)
-aug_test,indices=aug_data(test,aug_df)
-aug_test=aug_test.loc[indices]
+#aug_df_path=os.path.join(opts.path,'aug_data1.csv')
+#aug_df=pd.read_csv(aug_df_path)
+#aug_test,indices=aug_data(test,aug_df)
+#aug_test=aug_test.loc[indices]
 #aug_test=test
 #dataloader
 ls_indices=test.seq_length==130
-ls_indices2=aug_test.seq_length==130
+#ls_indices2=aug_test.seq_length==130
 long_data=test[ls_indices]
 data=preprocess_inputs(test[ls_indices])
 data=data.reshape(1,*data.shape)
-alt_data=get_alt_structures(alt_structure_df[ls_indices])
-alt_data2=get_alt_structures_50C(alt_structure_df_50C[ls_indices])
-data=np.concatenate([data,alt_data,alt_data2],0).transpose(1,0,2,3)
+# alt_data=get_alt_structures(alt_structure_df[ls_indices])
+# alt_data2=get_alt_structures_50C(alt_structure_df_50C[ls_indices])
+# data=np.concatenate([data,alt_data,alt_data2],0).transpose(1,0,2,3)
 
 
 # data2=preprocess_inputs(aug_test[ls_indices2])
 # data=np.stack([data,data2],axis=0)
 
 ids=np.asarray(long_data.id.to_list())
-long_dataset=RNADataset(long_data.sequence.to_list(),np.zeros(len(ls_indices)),ids, np.arange(len(ls_indices)),opts.path,training=False)
+long_dataset=RNADataset(long_data.sequence.to_list(),np.zeros(len(ls_indices)),ids, np.arange(len(ls_indices)),opts.path,training=False,k=opts.kmers[0])
 long_dataloader=DataLoader(long_dataset, batch_size=opts.batch_size,
                         shuffle=False)
 
 
 ss_indices=test.seq_length==107
-ss_indices2=aug_test.seq_length==107
+#ss_indices2=aug_test.seq_length==107
 short_data=test[ss_indices]
 ids=np.asarray(short_data.id.to_list())
 data=preprocess_inputs(test[ss_indices])
 data=data.reshape(1,*data.shape)
-alt_data=get_alt_structures(alt_structure_df[ss_indices])
-alt_data2=get_alt_structures_50C(alt_structure_df_50C[ss_indices])
-data=np.concatenate([data,alt_data,alt_data2],0).transpose(1,0,2,3)
+# alt_data=get_alt_structures(alt_structure_df[ss_indices])
+# alt_data2=get_alt_structures_50C(alt_structure_df_50C[ss_indices])
+# data=np.concatenate([data,alt_data,alt_data2],0).transpose(1,0,2,3)
 # print(data.shape)
 # exit()
-short_dataset=RNADataset(short_data.sequence.to_list(),np.zeros(len(ss_indices)), ids, np.arange(len(ss_indices)),opts.path,training=False)
+short_dataset=RNADataset(short_data.sequence.to_list(),np.zeros(len(ss_indices)), ids, np.arange(len(ss_indices)),opts.path,training=False,k=opts.kmers[0])
 short_dataloader=DataLoader(short_dataset, batch_size=opts.batch_size,
                         shuffle=False)
 
@@ -196,15 +200,15 @@ with torch.no_grad():
                 #outputs.append(model(sequence[:,i],bpps[:,i]))
                 temp.append(model(sequence[:,i],bpps[:,i]))
 
-            temp=torch.stack(temp,0).mean(0)
+            temp=torch.stack(temp,0)#.mean(0)
             outputs.append(temp)
 
-        outputs=torch.stack(outputs,1).cpu().numpy()#.mean(0)
+        outputs=torch.stack(outputs,1).cpu().permute(2,0,1,3,4)#.numpy()#.mean(0)
         #avg_preds=outputs.cpu().numpy()
             # avg_preds.append(output.cpu().numpy())
         #avg_preds=np.mean(avg_preds,axis=0)
         for pred in outputs:
-            preds.append(pred)
+            preds.append(pred.numpy())
         for string in batch['id']:
             ids.append(string)
 
@@ -220,13 +224,13 @@ with torch.no_grad():
                 #outputs.append(model(sequence[:,i],bpps[:,i]))
                 temp.append(model(sequence[:,i],bpps[:,i]))
 
-            temp=torch.stack(temp,0).mean(0)
+            temp=torch.stack(temp,0)#.mean(0)
             outputs.append(temp)
 
-        outputs=torch.stack(outputs,1).cpu().numpy()#.mean(0)
+        outputs=torch.stack(outputs,1).cpu().permute(2,0,1,3,4)#.numpy()#.mean(0)
         #avg_preds=outputs.cpu().numpy()
         for pred in outputs:
-            preds.append(pred)
+            preds.append(pred.numpy())
         for string in batch['id']:
             ids.append(string)
 #exit()
@@ -240,11 +244,13 @@ for i in tqdm(range(len(preds))):
 
 to_csv=[]
 for i in tqdm(range(len(preds_to_csv))):
-    to_write=np.asarray(preds_to_csv[i][0])
+    to_write=np.asarray(preds_to_csv[i][0].mean(0))
     to_write=to_write.transpose(1,0,2)
     for vector in to_write:
         to_csv.append(vector)
 to_csv=np.asarray(to_csv)
+
+#exit()
 
 # avail_packages=['vienna_2', 'nupack', 'contrafold_2', 'eternafold', 'rnastructure','rna_soft']
 avail_packages=['contrafold_2', 'eternafold', 'nupack', 'rnastructure', 'vienna_2', 'rnasoft']
@@ -256,15 +262,30 @@ for i, pkg in enumerate(avail_packages):
     pkg_predictions=np.stack([to_csv[:,i*2],to_csv[:,i*2+1]],0).mean(0)
     pkg_sub=submission.copy()
     pkg_sub.iloc[:,1:]=pkg_predictions
-    pkg_sub.to_csv(f"{pkg}.csv",index=False)
+    pkg_sub.to_csv(f"{sub_folder}/{pkg}.csv",index=False)
     #os.system(f'kaggle competitions submit -c stanford-covid-vaccine -f {pkg}.csv -m "Message"')
 
 
-
-with open('predictions.p','wb+') as f:
-    pickle.dump(preds,f)
+# with open('subs/predictions.p','wb+') as f:
+#     pickle.dump(preds,f)
 
 
 submission.iloc[:,1:]=to_csv.mean(1)
+submission.to_csv(f'{sub_folder}/submission.csv',index=False)
 
-submission.to_csv('submission.csv',index=False)
+for f in range(opts.nfolds):
+    to_csv=[]
+    fold_preds=[]
+    for i in tqdm(range(len(preds_to_csv))):
+
+        to_write=np.asarray(preds_to_csv[i][0][f])
+        fold_preds.append(to_write)
+        to_write=to_write.transpose(1,0,2)
+        for vector in to_write:
+            to_csv.append(vector)
+    to_csv=np.asarray(to_csv)
+    submission.iloc[:,1:]=to_csv.mean(1)
+    submission.to_csv(f'{sub_folder}/submission_fold{f}.csv',index=False)
+
+    with open(f'{sub_folder}/predictions_fold{f}.p','wb+') as f:
+        pickle.dump(fold_preds,f)
