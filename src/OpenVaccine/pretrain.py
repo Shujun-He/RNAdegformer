@@ -122,6 +122,8 @@ def train_fold():
             src=data['data']
             labels=data['labels']
             bpps=data['bpp'].to(device)
+            src_mask=data['src_mask'].to(device)
+
 
             if np.random.uniform()>0.5:
                 masked=mutate_rna_input(src)
@@ -132,7 +134,7 @@ def train_fold():
             masked=masked.to(device).long()
 
             #labels=labels.to(device).float()
-            output=model(masked,bpps)
+            output=model(masked,bpps,src_mask)
             #ew=data['ew'].to(device)
 
             # print(src[:,:,0].max())
@@ -165,7 +167,7 @@ def train_fold():
                 lr_schedule.step()
             print ("Epoch [{}/{}], Step [{}/{}] Loss: {:.3f} Lr:{:.6f} Time: {:.1f}"
                            .format(epoch+1, opts.epochs, step+1, total_steps, total_loss/(step+1) , lr,time.time()-t),end='\r',flush=True) #total_loss/(step+1)
-        
+
         print('')
         train_loss=total_loss/(step+1)
         torch.cuda.empty_cache()
