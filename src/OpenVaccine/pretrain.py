@@ -12,6 +12,7 @@ import argparse
 from ranger import Ranger
 from torchvision import transforms, utils
 from sklearn.model_selection import train_test_split, KFold
+from tqdm import tqdm
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -26,7 +27,7 @@ def get_args():
     parser.add_argument('--nhead', type=int, default=8, help='nhead for transformer encoder')
     parser.add_argument('--nhid', type=int, default=2048, help='nhid for transformer encoder')
     parser.add_argument('--nlayers', type=int, default=6, help='nlayers for transformer encoder')
-    parser.add_argument('--save_freq', type=int, default=1, help='saving checkpoints per save_freq epochs')
+    parser.add_argument('--save_freq', type=int, default=10, help='saving checkpoints per save_freq epochs')
     parser.add_argument('--dropout', type=float, default=.1, help='transformer dropout')
     parser.add_argument('--warmup_steps', type=int, default=3200, help='training schedule warmup steps')
     parser.add_argument('--lr_scale', type=float, default=0.1, help='learning rate scale')
@@ -65,33 +66,38 @@ def train_fold():
 
     #aug_test=test
     #dataloader
-    ls_indices=test.seq_length==130
-    long_data=test[ls_indices]
-    ids=np.asarray(long_data.id.to_list())
-    long_dataset=RNADataset(long_data.sequence.to_list(),np.zeros(len(ls_indices)),ids, np.arange(len(ls_indices)),opts.path)
-    long_dataloader=DataLoader(long_dataset, batch_size=opts.batch_size,
+    #ls_indices=test.seq_length==130
+
+    data=test#[ls_indices]
+
+    train_data, val_data = train_test_split(data,test_size=0.1,random_state=2022)
+
+    ids=np.asarray(train_data.id.to_list())
+    training_dataset=RNADataset(train_data.sequence.to_list(),np.zeros(len(train_data)),ids, np.arange(len(train_data)),opts.path,pad=True,k=opts.kmers[0])
+    training_dataloader=DataLoader(training_dataset, batch_size=opts.batch_size,
+                            shuffle=True,num_workers=opts.workers)
+
+    val_ids=np.asarray(val_data.id.to_list())
+    val_dataset=RNADataset(val_data.sequence.to_list(),np.zeros(len(val_data)),val_ids, np.arange(len(val_data)),opts.path,pad=True,k=opts.kmers[0])
+    val_dataloader=DataLoader(training_dataset, batch_size=opts.batch_size,
                             shuffle=True,num_workers=opts.workers)
 
 
-    ss_indices=test.seq_length==107
-    short_data=test[ss_indices]
-    ids=short_data.id.to_list()
-    ids=ids+train_ids
-    short_sequences=short_data.sequence.to_list()+json.sequence.to_list()
-    short_dataset=RNADataset(short_sequences,np.zeros(len(short_sequences)), ids, np.arange(len(short_sequences)), opts.path)
-    short_dataloader=DataLoader(short_dataset, batch_size=opts.batch_size,
-                            shuffle=True,num_workers=opts.workers)
+
 
 
 
     #checkpointing
     checkpoints_folder='pretrain_weights'
-    csv_file='pretrain.csv'.format((opts.fold))
-    columns=['epoch','train_loss']
+
+    os.system('mkdir logs')
+
+    csv_file='logs/pretrain.csv'.format((opts.fold))
+    columns=['epoch','train_loss','val_loss']
     logger=CSVLogger(columns,csv_file)
 
     #build model and logger
-    model=NucleicTransformer(opts.ntoken, opts.nclass, opts.ninp, opts.nhead, opts.nhid,
+    model=RNADegformer(opts.ntoken, opts.nclass, opts.ninp, opts.nhead, opts.nhid,
                            opts.nlayers, opts.kmer_aggregation, kmers=opts.kmers,stride=opts.stride,
                            dropout=opts.dropout, pretrain=True).to(device)
     optimizer=Ranger(model.parameters(), weight_decay=opts.weight_decay)
@@ -111,8 +117,9 @@ def train_fold():
 
     #training loop
     cos_epoch=int(opts.epochs*0.75)
-    total_steps=len(long_dataloader)+len(short_dataloader)
+    total_steps=len(training_dataloader)#+len(short_dataloader)
     lr_schedule=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,(opts.epochs-cos_epoch)*(total_steps))
+    best_loss=100000
     for epoch in range(opts.epochs):
         model.train(True)
         t=time.time()
@@ -121,13 +128,15 @@ def train_fold():
         train_preds=[]
         ground_truths=[]
         step=0
-        for data in short_dataloader:
+        for data in training_dataloader:
         #for step in range(1):
             step+=1
             lr=get_lr(optimizer)
             src=data['data']
             labels=data['labels']
             bpps=data['bpp'].to(device)
+            src_mask=data['src_mask'].to(device)
+
 
             if np.random.uniform()>0.5:
                 masked=mutate_rna_input(src)
@@ -137,48 +146,19 @@ def train_fold():
             src=src.to(device).long()
             masked=masked.to(device).long()
 
-            #labels=labels.to(device).float()
-            output=model(masked,bpps)
-            #ew=data['ew'].to(device)
+            output=model(masked,bpps,src_mask)
+
+            mask_selection=src[:,:,0]!=14
 
 
-            loss=(criterion(output[0].reshape(-1,4),src[:,:,0].reshape(-1))+\
-            criterion(output[1].reshape(-1,3),src[:,:,1].reshape(-1)-4)+\
-            criterion(output[2].reshape(-1,7),src[:,:,2].reshape(-1)-7))
 
-            # with amp.scale_loss(loss, optimizer) as scaled_loss:
-            #    scaled_loss.backward()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
-            optimizer.step()
-            optimizer.zero_grad()
-            total_loss+=loss
-            if epoch > cos_epoch:
-                lr_schedule.step()
-            print ("Epoch [{}/{}], Step [{}/{}] Loss: {:.3f} Lr:{:.6f} Time: {:.1f}"
-                           .format(epoch+1, opts.epochs, step+1, total_steps, total_loss/(step+1) , lr,time.time()-t),end='\r',flush=True) #total_loss/(step+1)
-        for data in long_dataloader:
-        #for step in range(1):
-            step+=1
-            lr=get_lr(optimizer)
-            src=data['data']
-            labels=data['labels']
-            bpps=data['bpp'].to(device)
 
-            if np.random.uniform()>0.5:
-                masked=mutate_rna_input(src)
-            else:
-                masked=mask_rna_input(src)
+            loss=(criterion(output[0][mask_selection].reshape(-1,4),src[:,:,0][mask_selection].reshape(-1))+\
+            criterion(output[1][mask_selection].reshape(-1,3),src[:,:,1][mask_selection].reshape(-1)-4)+\
+            criterion(output[2][mask_selection].reshape(-1,7),src[:,:,2][mask_selection].reshape(-1)-7))
 
-            src=src.to(device).long()
-            masked=masked.to(device).long()
-            #labels=labels.to(device).float()
-            output=model(masked,bpps)
-            #ew=data['ew'].to(device)
-
-            loss=(criterion(output[0].reshape(-1,4),src[:,:,0].reshape(-1))+\
-            criterion(output[1].reshape(-1,3),src[:,:,1].reshape(-1)-4)+\
-            criterion(output[2].reshape(-1,7),src[:,:,2].reshape(-1)-7))
+            # print(loss)
+            # exit()
 
             # with amp.scale_loss(loss, optimizer) as scaled_loss:
             #    scaled_loss.backward()
@@ -192,17 +172,49 @@ def train_fold():
             print ("Epoch [{}/{}], Step [{}/{}] Loss: {:.3f} Lr:{:.6f} Time: {:.1f}"
                            .format(epoch+1, opts.epochs, step+1, total_steps, total_loss/(step+1) , lr,time.time()-t),end='\r',flush=True) #total_loss/(step+1)
 
-            #break
-            # if epoch > cos_epoch:
-            #     lr_schedule.step()
         print('')
-        train_loss=total_loss/(step+1)
-        torch.cuda.empty_cache()
-        to_log=[epoch+1,train_loss,]
-        logger.log(to_log)
 
         if (epoch+1)%opts.save_freq==0:
-            save_weights(model,optimizer,epoch,checkpoints_folder)
+            val_loss=[]
+            for _ in tqdm(range(5)):
+                for data in val_dataloader:
+                #for step in range(1):
+                    src=data['data']
+                    labels=data['labels']
+                    bpps=data['bpp'].to(device)
+                    src_mask=data['src_mask'].to(device)
+
+
+                    if np.random.uniform()>0.5:
+                        masked=mutate_rna_input(src)
+                    else:
+                        masked=mask_rna_input(src)
+
+                    src=src.to(device).long()
+                    masked=masked.to(device).long()
+
+                    with torch.no_grad():
+                        output=model(masked,bpps,src_mask)
+
+                    mask_selection=src[:,:,0]!=14
+
+
+                    loss=(criterion(output[0][mask_selection].reshape(-1,4),src[:,:,0][mask_selection].reshape(-1))+\
+                    criterion(output[1][mask_selection].reshape(-1,3),src[:,:,1][mask_selection].reshape(-1)-4)+\
+                    criterion(output[2][mask_selection].reshape(-1,7),src[:,:,2][mask_selection].reshape(-1)-7))
+                    val_loss.append(loss.item())
+
+
+            val_loss=np.mean(val_loss)
+            train_loss=total_loss/(step+1)
+            torch.cuda.empty_cache()
+            to_log=[epoch+1,train_loss,val_loss]
+            logger.log(to_log)
+
+            if val_loss<best_loss:
+                print(f"new best_loss found at epoch {epoch}: {val_loss}")
+                best_loss=val_loss
+                save_weights(model,optimizer,-1,checkpoints_folder)
 
 
     get_best_weights_from_fold(opts.fold)

@@ -75,9 +75,9 @@ fold_models=[]
 folds=np.arange(opts.nfolds)
 for fold in folds:
     MODELS=[]
-    for i in range(1):
+    for i in range(5):
 
-        model=NucleicTransformer(opts.ntoken, opts.nclass, opts.ninp, opts.nhead, opts.nhid,
+        model=RNADegformer(opts.ntoken, opts.nclass, opts.ninp, opts.nhead, opts.nhid,
                                opts.nlayers, opts.kmer_aggregation, kmers=opts.kmers,
                                dropout=opts.dropout).to(device)
         optimizer=torch.optim.Adam(model.parameters(), weight_decay=opts.weight_decay)

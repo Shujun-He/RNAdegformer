@@ -260,10 +260,10 @@ class PositionalEncoding(nn.Module):
 
 
 
-class NucleicTransformer(nn.Module):
+class RNADegformer(nn.Module):
 
     def __init__(self, ntoken, nclass, ninp, nhead, nhid, nlayers, kmer_aggregation, kmers, stride=1,dropout=0.5,pretrain=False,return_aw=False):
-        super(NucleicTransformer, self).__init__()
+        super(RNADegformer, self).__init__()
         self.model_type = 'Transformer'
         self.src_mask = None
         #self.pos_encoder = PositionalEncoding(ninp, dropout)

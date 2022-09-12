@@ -118,3 +118,26 @@ class RNADataset(Dataset):
         # if self.transform:
         #     sample=self.transform(sample)
         return sample
+
+class RNADataset233(Dataset):
+    def __init__(self,df,path):
+        self.df=df
+        self.path=path
+        self.tokens='ACGU().BEHIMSX'
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        sequence=np.array([self.tokens.index(s) for s in self.df['sequence'][idx]])
+        structure=np.array([self.tokens.index(s) for s in self.df['structure'][idx]])
+        loop=np.array([self.tokens.index(s) for s in self.df['structure'][idx]])
+
+        src=np.stack([sequence,structure,loop],-1)
+
+        bpp=np.load(os.path.join(self.path,'new_sequences_bpps',f'{idx}.npy'))
+        dm=get_distance_mask(len(sequence))
+
+        bpp=np.concatenate([bpp.reshape(1,*bpp.shape),dm],0)
+
+        return {'src':src,'bpp':bpp}

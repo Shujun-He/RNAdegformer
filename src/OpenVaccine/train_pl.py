@@ -167,7 +167,7 @@ def train_fold():
     logger=CSVLogger(columns,csv_file)
 
     #build model and logger
-    model=NucleicTransformer(opts.ntoken, opts.nclass, opts.ninp, opts.nhead, opts.nhid,
+    model=RNADegformer(opts.ntoken, opts.nclass, opts.ninp, opts.nhead, opts.nhid,
                            opts.nlayers, opts.kmer_aggregation, kmers=opts.kmers,stride=opts.stride,
                            dropout=opts.dropout).to(device)
     optimizer=Ranger(model.parameters(), weight_decay=opts.weight_decay)
