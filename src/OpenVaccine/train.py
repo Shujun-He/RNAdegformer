@@ -101,7 +101,8 @@ def train_fold():
     # exit()
     #checkpointing
     checkpoints_folder='checkpoints_fold{}'.format((opts.fold))
-    csv_file='log_fold{}.csv'.format((opts.fold))
+    os.system('mkdir logs')
+    csv_file='logs/log_fold{}.csv'.format((opts.fold))
     columns=['epoch','train_loss',
              'val_loss']
     logger=CSVLogger(columns,csv_file)
@@ -118,9 +119,9 @@ def train_fold():
     opt_level = 'O1'
     #model, optimizer = amp.initialize(model, optimizer, opt_level=opt_level)
     model = nn.DataParallel(model)
-    pretrained_df=pd.read_csv('pretrain.csv')
+    #pretrained_df=pd.read_csv('pretrain.csv')
     #print(pretrained_df.epoch[-1])
-    model.load_state_dict(torch.load('pretrain_weights/epoch{}.ckpt'.format(int(pretrained_df.iloc[-1].epoch))))
+    model.load_state_dict(torch.load('pretrain_weights/epoch0.ckpt'))
 
     pytorch_total_params = sum(p.numel() for p in model.parameters())
     print('Total number of paramters: {}'.format(pytorch_total_params))

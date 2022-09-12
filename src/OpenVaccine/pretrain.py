@@ -73,12 +73,12 @@ def train_fold():
     train_data, val_data = train_test_split(data,test_size=0.1,random_state=2022)
 
     ids=np.asarray(train_data.id.to_list())
-    training_dataset=RNADataset(train_data.sequence.to_list(),np.zeros(len(train_data)),ids, np.arange(len(train_data)),opts.path,pad=True)
+    training_dataset=RNADataset(train_data.sequence.to_list(),np.zeros(len(train_data)),ids, np.arange(len(train_data)),opts.path,pad=True,k=opts.kmers[0])
     training_dataloader=DataLoader(training_dataset, batch_size=opts.batch_size,
                             shuffle=True,num_workers=opts.workers)
 
     val_ids=np.asarray(val_data.id.to_list())
-    val_dataset=RNADataset(val_data.sequence.to_list(),np.zeros(len(val_data)),val_ids, np.arange(len(val_data)),opts.path,pad=True)
+    val_dataset=RNADataset(val_data.sequence.to_list(),np.zeros(len(val_data)),val_ids, np.arange(len(val_data)),opts.path,pad=True,k=opts.kmers[0])
     val_dataloader=DataLoader(training_dataset, batch_size=opts.batch_size,
                             shuffle=True,num_workers=opts.workers)
 
