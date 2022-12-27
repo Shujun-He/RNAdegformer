@@ -10,7 +10,7 @@ Source code to reproduce results in the paper "RNAdegformer: Accurate Prediction
 
 ## How to use the models
 
-I also made a web app to use the models. Check it out at [https://github.com/Shujun-He/Nucleic-Transformer-WebApp](https://github.com/Shujun-He/RNAdegformer-Webapp)
+I also made a web app to use the models. Check it out at [https://github.com/Shujun-He/RNAdegformer-Webapp](https://github.com/Shujun-He/RNAdegformer-Webapp)
 
 ### Home page
 ![home_page](https://github.com/Shujun-He/RNAdegformer-Webapp/blob/main/files/home_page.png)
@@ -18,7 +18,7 @@ I also made a web app to use the models. Check it out at [https://github.com/Shu
 
 
 ### RNA degradation prediction
-In this page you can predict RNA degradation at each nucleotide and visualize the attention weights of the Nucleic Transformer
+In this page you can predict RNA degradation at each nucleotide and visualize the attention weights of the RNAdegformer
 
 ![RNA degradation](https://github.com/Shujun-He/RNAdegformer-Webapp/blob/main/files/rnapage.png)
 
