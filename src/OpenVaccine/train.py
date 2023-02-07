@@ -18,7 +18,7 @@ try:
 except ImportError:
     raise ImportError("Please install apex from https://www.github.com/nvidia/apex to run this example.")
 from torchvision import transforms, utils
-#from Mutation import *
+from Mutation import *
 from sklearn.model_selection import train_test_split, KFold
 
 def get_args():
@@ -101,14 +101,13 @@ def train_fold():
     # exit()
     #checkpointing
     checkpoints_folder='checkpoints_fold{}'.format((opts.fold))
-    os.system('mkdir logs')
-    csv_file='logs/log_fold{}.csv'.format((opts.fold))
+    csv_file='log_fold{}.csv'.format((opts.fold))
     columns=['epoch','train_loss',
              'val_loss']
     logger=CSVLogger(columns,csv_file)
 
     #build model and logger
-    model=RNADegformer(opts.ntoken, opts.nclass, opts.ninp, opts.nhead, opts.nhid,
+    model=NucleicTransformer(opts.ntoken, opts.nclass, opts.ninp, opts.nhead, opts.nhid,
                            opts.nlayers, opts.kmer_aggregation, kmers=opts.kmers,stride=opts.stride,
                            dropout=opts.dropout).to(device)
     optimizer=Ranger(model.parameters(), weight_decay=opts.weight_decay)
@@ -119,9 +118,9 @@ def train_fold():
     opt_level = 'O1'
     #model, optimizer = amp.initialize(model, optimizer, opt_level=opt_level)
     model = nn.DataParallel(model)
-    #pretrained_df=pd.read_csv('pretrain.csv')
+    pretrained_df=pd.read_csv('pretrain.csv')
     #print(pretrained_df.epoch[-1])
-    model.load_state_dict(torch.load('pretrain_weights/epoch0.ckpt'))
+    model.load_state_dict(torch.load('pretrain_weights/epoch{}.ckpt'.format(int(pretrained_df.iloc[-1].epoch))))
 
     pytorch_total_params = sum(p.numel() for p in model.parameters())
     print('Total number of paramters: {}'.format(pytorch_total_params))
