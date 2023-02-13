@@ -1,10 +1,10 @@
 # Code to reproduce results for the openvaccine dataset
 
-First download all necessary data: 
+First download all necessary data ```bash download_data.sh```, which does the following:
 
-Base dataset: https://www.kaggle.com/c/stanford-covid-vaccine/data
+Download base dataset: https://www.kaggle.com/c/stanford-covid-vaccine/data
 
-12x augmented dataset: https://www.kaggle.com/shujun717/openvaccine-12x-dataset
+Download 12x augmented dataset: https://www.kaggle.com/shujun717/openvaccine-12x-dataset
 
 Unzip them to the same directory, so that the directory contains
 
@@ -15,12 +15,7 @@ Unzip them to the same directory, so that the directory contains
 ├── post_deadline_files                   
 └── openvaccine_12x_dataset
 
-
-Then change the name of the folder openvaccine_12x_dataset to train_test_bpps
-
 Here I include the hypeparameters that give the best single model.
-
-0. modify the --path variable in pretrain.sh and run.sh to wherever you unzipped all the data as instructed above
 
 1. pretrain with all available sequences: ```./pretrain.sh```
 
