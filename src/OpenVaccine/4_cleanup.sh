@@ -1,0 +1,1 @@
+python cleanup.py --project_path /mnt/data/experiments_train

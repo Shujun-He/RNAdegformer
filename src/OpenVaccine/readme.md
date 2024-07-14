@@ -1,5 +1,7 @@
 # Code to reproduce results for the openvaccine dataset
 
+
+## Data setup
 First download all necessary data ```bash download_data.sh```, which does the following:
 
 Download base dataset: https://www.kaggle.com/c/stanford-covid-vaccine/data
@@ -15,12 +17,27 @@ Unzip them to the same directory, so that the directory contains
 ├── post_deadline_files                   
 └── openvaccine_12x_dataset
 
-Here I include the hypeparameters that give the best single model.
 
-1. pretrain with all available sequences: ```./pretrain.sh```
-
-2. train on targets: ```./run.sh```
-
-3. ```python get_best_weights.py``` to extract best weights for each fold based on validation performance
-
-4. to make predictions and generate a csv file (submission.csv) for submission on kaggle: ```./predict.sh``` then you can make a submission at https://www.kaggle.com/c/stanford-covid-vaccine/submissions
+## Training Pipeline
+1. **Load data**
+   - As instructed in ``download_data.sh`` into a ``data_path``
+2. **Create new directory** 
+   - to store all weights and predictions, e.g. ``project_path``
+3. **Pretrain model** 
+   - with ``pretrain.sh`` for 1 fold, specify paths from above
+   - pretrain weights will be stored in ``project_path/weights_pretrain``
+   - best checkpoint wights will be stored in ``project_path/weights_pretrain_best``
+4. **Train model** 
+   - with ``run.sh`` for 10 folds
+   - pretrain weights will be stored in ``project_path/weights_train``
+   - best checkpoint wights will be stored in ``project_path/weights_train_best``
+5. **Create pseudo labels** 
+   - with trained model with ``predict_pl.sh`` 
+   - pseudo labels (pl) will be stored in ``project_path/pseudo_labels``
+6. **Fine-tune model**
+   - based on pseudo labels with ``train_pl.sh`` for 10 folds
+   - pl train weights will be stored in ``project_path/weights_pl``
+   - best checkpoint wights will be stored in ``project_path/weights_pl_best``
+7. **Obtain predictions**
+   - with pl and ground truth fine-tuned weights with ``predict.sh``
+   - predictions will be stored in ``project_path/predictions``
